@@ -31,7 +31,9 @@ jobs:
       WALL_REPO: https://github.com/${{ github.repository }}.git
       # 独立克隆，放在 checkout 之外：档案员要能对着 origin 重新拉一遍，
       # 而不是信任它脚下这份工作副本 —— 它记的是账，不是缓存。
-      WALL_ARCHIVE_DIR: ${{ runner.temp }}/archive
+      # 注意：job 级 env 里不能用 runner.* 上下文（GitHub 表达式解析会拒绝），
+      # runner 是临时的，写死路径没有副作用。
+      WALL_ARCHIVE_DIR: /tmp/rn-archive
     steps:
       - uses: actions/checkout@v4
 
