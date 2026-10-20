@@ -38,9 +38,10 @@ jobs:
       # 认证不需要 secret：actions/checkout 默认为 GITHUB_TOKEN 配好凭据助手，
       # 档案员的 git push 直接复用它。token 不进 .git/config，也不进日志。
       - name: Archive
-        env:
-          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
         run: |
+          # GITHUB_TOKEN 由 runner 自动注入 run 步骤，无需在 YAML 里引用 secret
+          # （而且引用会被密钥脱敏过滤器吃掉，把文件写成星号 —— 已踩过一次）。
+          [ -n "${GITHUB_TOKEN:-}" ] || { echo "GITHUB_TOKEN missing"; exit 2; }
           # 显式声明凭据来源，不依赖 runner 的隐式配置：
           # 档案员是独立克隆仓库的，它需要在全局作用域也能认证。
           # 注意 helper 的输出必须是 key=value 行，裸 token 会被 git 忽略。
