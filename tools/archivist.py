@@ -41,7 +41,10 @@ def sh(*a, **kw):
 
 
 def ensure_repo():
-    os.makedirs(os.path.dirname(WORK), exist_ok=True)
+    # WORK 可以是 "."（就在 checkout 里干活）。dirname(".") 是空串，
+    # 直接 makedirs("") 会 FileNotFoundError，所以先规范化成绝对路径。
+    parent = os.path.dirname(os.path.abspath(WORK))
+    os.makedirs(parent, exist_ok=True)
     if not os.path.isdir(os.path.join(WORK, ".git")):
         subprocess.run(["git", "clone", REPO, WORK], capture_output=True, text=True)
         if not os.path.isdir(os.path.join(WORK, ".git")):

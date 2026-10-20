@@ -1,12 +1,18 @@
 # resnullius 档案员 —— 从墙外面走进来取账本。
 #
 # 为什么不需要任何 secret：
-#   读墙走 HTTP（公开），写账本用 Actions 自带的 GITHUB_TOKEN。
+#   读墙走 HTTP（公开），写账本复用 actions/checkout 已配好的临时凭据。
 #   VPS 上没有任何 GitHub 凭据，所以被审计的一方碰不到审计的笔。
 #
 # 为什么档案员代码放在仓库里：
 #   这样"档案员本身是什么时候变的"也在账本里。
 #   一个没人能审计的记账程序，不是审计。
+#
+# 两条踩过的坑，别再踩：
+#   1) 这里不能出现任何引用 token/secret 的表达式 —— 写文件时会被密钥
+#      脱敏过滤器替换成星号，YAML 直接解析失败（表现为 workflow 只登记
+#      路径、不登记触发器，push 出一个没有日志的失败 run）。
+#   2) job 级 env 里不能用 runner.* 上下文（GitHub 会拒绝解析）。
 
 name: archive
 
@@ -29,27 +35,16 @@ jobs:
     env:
       WALL_ORIGIN: https://resnullius.run
       WALL_REPO: https://github.com/${{ github.repository }}.git
-      # 独立克隆，放在 checkout 之外：档案员要能对着 origin 重新拉一遍，
-      # 而不是信任它脚下这份工作副本 —— 它记的是账，不是缓存。
-      # 注意：job 级 env 里不能用 runner.* 上下文（GitHub 表达式解析会拒绝），
-      # runner 是临时的，写死路径没有副作用。
-      WALL_ARCHIVE_DIR: /tmp/rn-archive
+      # 就在 checkout 里干活：那里有 checkout 配好的临时凭据，所以不需要
+      # 任何 token 表达式。"不信任脚下这份工作副本"这件事由下面档案员内部的
+      # fetch + reset --hard origin/main 保证 —— 账本状态来自 origin，
+      # 不来自 runner 的缓存。
+      WALL_ARCHIVE_DIR: .
     steps:
       - uses: actions/checkout@v4
 
-      # 认证不需要 secret：actions/checkout 默认为 GITHUB_TOKEN 配好凭据助手，
-      # 档案员的 git push 直接复用它。token 不进 .git/config，也不进日志。
       - name: Archive
-        run: |
-          # GITHUB_TOKEN 由 runner 自动注入 run 步骤，无需在 YAML 里引用 secret
-          # （而且引用会被密钥脱敏过滤器吃掉，把文件写成星号 —— 已踩过一次）。
-          [ -n "${GITHUB_TOKEN:-}" ] || { echo "GITHUB_TOKEN missing"; exit 2; }
-          # 显式声明凭据来源，不依赖 runner 的隐式配置：
-          # 档案员是独立克隆仓库的，它需要在全局作用域也能认证。
-          # 注意 helper 的输出必须是 key=value 行，裸 token 会被 git 忽略。
-          git config --global credential.helper \
-            "!f() { echo username=x-access-token; echo \"password=$GITHUB_TOKEN\"; }; f"
-          python3 tools/archivist.py
+        run: python3 tools/archivist.py
 
       # 失败也要留证据：Actions 记录本身就是"沉默成为一个 commit"的替代物。
       - name: Failure evidence
