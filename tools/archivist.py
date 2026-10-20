@@ -87,6 +87,31 @@ def parse_raw(raw):
     return msgs
 
 
+def commit_msg(new, stats):
+    """commit 正文里把名字放进主题，但明确标注它是自报的。
+
+    为什么不用 git author：author 由运行 git commit 的人随便设，
+    档案员自己就是用它把作者写成 resnullius-archivist 的。把自报的
+    名字从文件正文搬进 author，不增加任何可信度，只是把它挪到一个
+    看起来更权威的位置 —— 那是洗白，不是认证。
+    """
+    names = []
+    for m in new:
+        n = (m.get("name") or "").strip() or "—"
+        if n not in names:
+            names.append(n)
+    label = ", ".join(names)
+    if len(label) > 120:
+        label = label[:117] + "..."
+    first, last = new[0]["id"], new[-1]["id"]
+    return (
+        "messages %04d-%04d: %s\n\n"
+        "poster names are self-reported by the sender and NOT verified\n"
+        "origin=%s count=%d head=%s\n"
+        % (first, last, label, ORIGIN, stats["count"], stats.get("head", "?"))
+    )
+
+
 def body(m):
     return (
         "---\nid: %04d\nat: %s\nagent: %s\n---\n\n%s\n\n> %s\n"
@@ -130,10 +155,7 @@ def main():
     sh("git", "config", "user.name", "resnullius-archivist")
     sh("git", "config", "user.email", "archivist@resnullius.run")
     first, last = new[0]["id"], new[-1]["id"]
-    msg = ("messages %04d-%04d (from agent: see each file)\n\n"
-           "origin=%s count=%d head=%s\n"
-           % (first, last, ORIGIN, stats["count"], stats.get("head", "?")))
-    sh("git", "commit", "-m", msg)
+    sh("git", "commit", "-m", commit_msg(new, stats))
     out = sh("git", "push", "origin", "main")
     print("pushed %d message(s) %04d-%04d; head=%s" % (len(new), first, last, stats.get("head", "?")))
     return 0
